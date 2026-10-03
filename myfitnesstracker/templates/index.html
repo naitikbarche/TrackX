@@ -1,0 +1,1954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>TrackX</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    <style>
+        /* =========================
+           HISTORY
+           ========================= */
+
+        #history {
+            max-width: 650px;
+        }
+
+        .history-empty {
+            text-align: center;
+            color: #888;
+            padding: 40px 10px;
+        }
+
+        .history-card {
+            background: #181818;
+            border: 1px solid #303030;
+            border-radius: 16px;
+            padding: 18px;
+            margin-bottom: 16px;
+            text-align: left;
+        }
+
+        .history-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .history-title {
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .history-date {
+            color: #888;
+            font-size: 13px;
+            margin-bottom: 15px;
+        }
+
+        .delete-btn {
+            background: transparent;
+            border: none;
+            color: #aaa;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 5px 8px;
+            border-radius: 7px;
+        }
+
+        .delete-btn:hover {
+            background: #292929;
+            color: white;
+        }
+
+        /* GPS TRACK */
+
+        .route-container {
+            width: 100%;
+            height: 190px;
+            background: #101010;
+            border: 1px solid #292929;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+
+        .route-svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .route-line {
+            fill: none;
+            stroke: #ffffff;
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .route-start,
+        .route-end {
+            fill: white;
+        }
+
+        .no-route {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-size: 13px;
+        }
+
+        /* HISTORY STATS */
+
+        .history-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+
+        .history-stat {
+            background: #111;
+            border-radius: 10px;
+            padding: 12px;
+        }
+
+        .history-stat-label {
+            color: #777;
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+
+        .history-stat-value {
+            color: white;
+            font-size: 17px;
+            font-weight: bold;
+        }
+
+        /* =========================
+           POPUPS
+           ========================= */
+
+        #savePopup,
+        #deletePopup {
+            display: none;
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+
+            background: rgba(0, 0, 0, 0.78);
+            backdrop-filter: blur(5px);
+
+            align-items: center;
+            justify-content: center;
+
+            z-index: 9999;
+        }
+
+        .popup-box {
+            width: 90%;
+            max-width: 380px;
+
+            background: #181818;
+            border: 1px solid #333;
+            border-radius: 16px;
+
+            padding: 25px;
+            text-align: center;
+
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6);
+        }
+
+        .popup-box h2 {
+            margin-bottom: 12px;
+        }
+
+        .popup-box p {
+            color: #aaa;
+            margin-bottom: 22px;
+        }
+
+        .popup-info {
+            background: #111;
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 18px;
+            color: #ddd;
+            line-height: 1.7;
+        }
+
+        .popup-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .popup-buttons button {
+            width: 100%;
+            padding: 11px;
+
+            background: #222;
+            color: white;
+
+            border: 1px solid #3a3a3a;
+            border-radius: 9px;
+
+            cursor: pointer;
+            font-size: 15px;
+        }
+
+        .popup-buttons button:hover {
+            background: #2d2d2d;
+        }
+
+        .danger-btn {
+            background: #2a1717 !important;
+            border-color: #5a2929 !important;
+        }
+
+        .danger-btn:hover {
+            background: #3a1c1c !important;
+        }
+
+        /* =========================
+           MOBILE
+           ========================= */
+
+        @media (max-width: 600px) {
+            main {
+                margin: 25px 12px;
+                padding: 18px;
+            }
+
+            .route-container {
+                height: 160px;
+            }
+
+            .history-stats {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+    </style>
+</head>
+<link rel="manifest" href="/static/manifest.json">
+
+<body>
+
+    <h1>TrackX</h1>
+
+    <!-- =========================
+         NAVIGATION
+         ========================= -->
+
+    <nav>
+        <button onclick="showTab('history')">History</button>
+        <button onclick="showTab('running')">Running</button>
+        <button onclick="showTab('cycling')">Cycling</button>
+    </nav>
+
+
+    <!-- =========================
+         HISTORY
+         ========================= -->
+
+    <main id="history">
+
+        <h2>History</h2>
+        <p>Your saved activities</p>
+
+        <div id="historyList"></div>
+
+    </main>
+
+
+    <!-- =========================
+         RUNNING
+         ========================= -->
+
+    <main id="running" style="display: none;">
+
+        <h2>Running</h2>
+        <p>Track your run using GPS</p>
+
+        <div class="stats">
+
+            <h3 id="runDistance">0.00 km</h3>
+            <p>Distance</p>
+
+            <h3 id="runTime">00:00:00</h3>
+            <p>Time</p>
+
+            <h3 id="runPace">--:-- /km</h3>
+            <p>Pace</p>
+
+        </div>
+
+        <button id="runStartBtn" onclick="startRunning()">Start</button>
+        <button id="runPauseBtn" onclick="pauseRunning()">Pause</button>
+        <button id="runStopBtn" onclick="stopRunning()">Stop</button>
+
+    </main>
+
+
+    <!-- =========================
+         CYCLING
+         ========================= -->
+
+    <main id="cycling" style="display: none;">
+
+        <h2>Cycling</h2>
+        <p>Track your cycling using GPS</p>
+
+        <div class="stats">
+
+            <h3 id="cycleDistance">0.00 km</h3>
+            <p>Distance</p>
+
+            <h3 id="cycleTime">00:00:00</h3>
+            <p>Time</p>
+
+            <h3 id="cycleSpeed">0.0 km/h</h3>
+            <p>Speed</p>
+
+        </div>
+
+        <button id="cycleStartBtn" onclick="startCycling()">Start</button>
+        <button id="cyclePauseBtn" onclick="pauseCycling()">Pause</button>
+        <button id="cycleStopBtn" onclick="stopCycling()">Stop</button>
+
+    </main>
+
+
+    <!-- =========================
+         SAVE SESSION POPUP
+         ========================= -->
+
+    <div id="savePopup">
+
+        <div class="popup-box">
+
+            <h2>Save Activity?</h2>
+
+            <div class="popup-info" id="savePopupInfo">
+                Activity details
+            </div>
+
+            <div class="popup-buttons">
+
+                <button onclick="saveSession()">
+                    Save Session
+                </button>
+
+                <button onclick="cancelStop()">
+                    Cancel
+                </button>
+
+                <button onclick="discardSession()" class="danger-btn">
+                    Discard
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- =========================
+         DELETE CONFIRMATION POPUP
+         ========================= -->
+
+    <div id="deletePopup">
+
+        <div class="popup-box">
+
+            <h2>Delete Activity?</h2>
+
+            <p>
+                This activity will be permanently removed from your History.
+            </p>
+
+            <div class="popup-buttons">
+
+                <button onclick="closeDeletePopup()">
+                    Cancel
+                </button>
+
+                <button onclick="confirmDelete()" class="danger-btn">
+                    Delete
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <script>
+
+        /* =====================================================
+           GENERAL TAB SYSTEM
+           ===================================================== */
+
+        function showTab(tab) {
+
+            document.getElementById("history").style.display = "none";
+            document.getElementById("running").style.display = "none";
+            document.getElementById("cycling").style.display = "none";
+
+            document.getElementById(tab).style.display = "block";
+
+            if (tab === "history") {
+                renderHistory();
+            }
+        }
+
+
+        /* =====================================================
+           TIME FORMAT
+           ===================================================== */
+
+        function formatTime(totalSeconds) {
+
+            totalSeconds = Math.floor(totalSeconds);
+
+            const hours = Math.floor(totalSeconds / 3600);
+
+            const minutes = Math.floor(
+                (totalSeconds % 3600) / 60
+            );
+
+            const seconds = totalSeconds % 60;
+
+            return (
+                String(hours).padStart(2, "0") +
+                ":" +
+                String(minutes).padStart(2, "0") +
+                ":" +
+                String(seconds).padStart(2, "0")
+            );
+        }
+
+
+        /* =====================================================
+           PACE FORMAT
+           ===================================================== */
+
+        function formatPace(secondsPerKm) {
+
+            if (
+                !isFinite(secondsPerKm) ||
+                secondsPerKm <= 0
+            ) {
+                return "--:-- /km";
+            }
+
+            const minutes = Math.floor(
+                secondsPerKm / 60
+            );
+
+            const seconds = Math.floor(
+                secondsPerKm % 60
+            );
+
+            return (
+                String(minutes).padStart(2, "0") +
+                ":" +
+                String(seconds).padStart(2, "0") +
+                " /km"
+            );
+        }
+
+
+        /* =====================================================
+           DISTANCE CALCULATION
+           ===================================================== */
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+
+            const earthRadius = 6371;
+
+            const dLat =
+                (lat2 - lat1) *
+                Math.PI / 180;
+
+            const dLon =
+                (lon2 - lon1) *
+                Math.PI / 180;
+
+            const a =
+                Math.sin(dLat / 2) *
+                Math.sin(dLat / 2) +
+
+                Math.cos(lat1 * Math.PI / 180) *
+                Math.cos(lat2 * Math.PI / 180) *
+
+                Math.sin(dLon / 2) *
+                Math.sin(dLon / 2);
+
+            const c =
+                2 *
+                Math.atan2(
+                    Math.sqrt(a),
+                    Math.sqrt(1 - a)
+                );
+
+            return earthRadius * c;
+        }
+
+
+        /* =====================================================
+           RUNNING VARIABLES
+           ===================================================== */
+
+        let runSeconds = 0;
+        let runTimer = null;
+
+        let runDistance = 0;
+
+        let lastRunPosition = null;
+
+        let runGPSWatcher = null;
+
+        let runActive = false;
+
+        let runStartedAt = null;
+
+        /*
+         * Every GPS point is stored here.
+         *
+         * Example:
+         *
+         * [
+         *   {lat: 22.7196, lon: 75.8577},
+         *   {lat: 22.7200, lon: 75.8580}
+         * ]
+         */
+
+        let runRoute = [];
+
+
+        /* =====================================================
+           RUNNING GPS
+           ===================================================== */
+
+        function startRunningGPS() {
+
+            if (!navigator.geolocation) {
+
+                alert(
+                    "GPS is not supported by this browser."
+                );
+
+                return;
+            }
+
+            runGPSWatcher =
+                navigator.geolocation.watchPosition(
+
+                    function(position) {
+
+                        const latitude =
+                            position.coords.latitude;
+
+                        const longitude =
+                            position.coords.longitude;
+
+
+                        /* First GPS point */
+
+                        if (lastRunPosition === null) {
+
+                            lastRunPosition = {
+                                lat: latitude,
+                                lon: longitude
+                            };
+
+                            runRoute.push({
+                                lat: latitude,
+                                lon: longitude
+                            });
+
+                            return;
+                        }
+
+
+                        /* Calculate distance */
+
+                        const distance =
+                            calculateDistance(
+                                lastRunPosition.lat,
+                                lastRunPosition.lon,
+                                latitude,
+                                longitude
+                            );
+
+
+                        /*
+                         * Ignore extremely tiny GPS
+                         * movements/noise.
+                         */
+
+                        if (distance >= 0.003) {
+
+                            runDistance += distance;
+
+                            lastRunPosition = {
+                                lat: latitude,
+                                lon: longitude
+                            };
+
+                            runRoute.push({
+                                lat: latitude,
+                                lon: longitude
+                            });
+
+                            updateRunningStats();
+                        }
+
+                    },
+
+                    function(error) {
+
+                        console.log(
+                            "Running GPS error:",
+                            error
+                        );
+
+                        alert(
+                            "Unable to get GPS location. Please allow location access."
+                        );
+                    },
+
+                    {
+                        enableHighAccuracy: true,
+                        maximumAge: 0,
+                        timeout: 10000
+                    }
+                );
+        }
+
+
+        /* =====================================================
+           RUNNING STATS
+           ===================================================== */
+
+        function updateRunningStats() {
+
+            document.getElementById(
+                "runDistance"
+            ).textContent =
+                runDistance.toFixed(2) + " km";
+
+
+            document.getElementById(
+                "runTime"
+            ).textContent =
+                formatTime(runSeconds);
+
+
+            if (runDistance > 0) {
+
+                const pace =
+                    runSeconds / runDistance;
+
+                document.getElementById(
+                    "runPace"
+                ).textContent =
+                    formatPace(pace);
+
+            } else {
+
+                document.getElementById(
+                    "runPace"
+                ).textContent =
+                    "--:-- /km";
+            }
+        }
+
+
+        /* =====================================================
+           START RUNNING
+           ===================================================== */
+
+        function startRunning() {
+
+            /*
+             * New session
+             */
+
+            if (!runActive && runSeconds === 0) {
+
+                runDistance = 0;
+                runRoute = [];
+                lastRunPosition = null;
+
+                runStartedAt = new Date();
+            }
+
+            runActive = true;
+
+
+            if (runTimer === null) {
+
+                runTimer = setInterval(
+                    function() {
+
+                        runSeconds++;
+
+                        updateRunningStats();
+
+                    },
+                    1000
+                );
+            }
+
+
+            startRunningGPS();
+        }
+
+
+        /* =====================================================
+           PAUSE RUNNING
+           ===================================================== */
+
+        function pauseRunning() {
+
+            if (!runActive) {
+                return;
+            }
+
+            runActive = false;
+
+
+            if (runTimer !== null) {
+
+                clearInterval(runTimer);
+
+                runTimer = null;
+            }
+
+
+            if (runGPSWatcher !== null) {
+
+                navigator.geolocation.clearWatch(
+                    runGPSWatcher
+                );
+
+                runGPSWatcher = null;
+            }
+
+            /*
+             * Important:
+             * Keep route data, but remove the last
+             * position so movement while paused
+             * is not counted.
+             */
+
+            lastRunPosition = null;
+        }
+
+
+        /* =====================================================
+           STOP RUNNING
+           ===================================================== */
+
+        function stopRunning() {
+
+            if (runSeconds === 0 && runDistance === 0) {
+                return;
+            }
+
+            runActive = false;
+
+
+            if (runTimer !== null) {
+
+                clearInterval(runTimer);
+
+                runTimer = null;
+            }
+
+
+            if (runGPSWatcher !== null) {
+
+                navigator.geolocation.clearWatch(
+                    runGPSWatcher
+                );
+
+                runGPSWatcher = null;
+            }
+
+            lastRunPosition = null;
+
+
+            document.getElementById(
+                "savePopupInfo"
+            ).innerHTML =
+
+                "Running<br>" +
+
+                "Distance: " +
+                runDistance.toFixed(2) +
+                " km<br>" +
+
+                "Duration: " +
+                formatTime(runSeconds) +
+                "<br>" +
+
+                "Pace: " +
+                (
+                    runDistance > 0
+                        ? formatPace(
+                            runSeconds / runDistance
+                        )
+                        : "--:-- /km"
+                );
+
+
+            window.currentActivity = "running";
+
+
+            document.getElementById(
+                "savePopup"
+            ).style.display = "flex";
+        }
+
+
+        /* =====================================================
+           CYCLING VARIABLES
+           ===================================================== */
+
+        let cycleSeconds = 0;
+        let cycleTimer = null;
+
+        let cycleDistance = 0;
+
+        let lastCyclePosition = null;
+
+        let cycleGPSWatcher = null;
+
+        let cycleActive = false;
+
+        let cycleStartedAt = null;
+
+        let cycleRoute = [];
+
+
+        /* =====================================================
+           CYCLING GPS
+           ===================================================== */
+
+        function startCyclingGPS() {
+
+            if (!navigator.geolocation) {
+
+                alert(
+                    "GPS is not supported by this browser."
+                );
+
+                return;
+            }
+
+
+            cycleGPSWatcher =
+                navigator.geolocation.watchPosition(
+
+                    function(position) {
+
+                        const latitude =
+                            position.coords.latitude;
+
+                        const longitude =
+                            position.coords.longitude;
+
+
+                        /*
+                         * First GPS point
+                         */
+
+                        if (lastCyclePosition === null) {
+
+                            lastCyclePosition = {
+                                lat: latitude,
+                                lon: longitude
+                            };
+
+                            cycleRoute.push({
+                                lat: latitude,
+                                lon: longitude
+                            });
+
+                            return;
+                        }
+
+
+                        /*
+                         * Calculate distance
+                         */
+
+                        const distance =
+                            calculateDistance(
+                                lastCyclePosition.lat,
+                                lastCyclePosition.lon,
+                                latitude,
+                                longitude
+                            );
+
+
+                        if (distance >= 0.003) {
+
+                            cycleDistance += distance;
+
+                            lastCyclePosition = {
+                                lat: latitude,
+                                lon: longitude
+                            };
+
+                            cycleRoute.push({
+                                lat: latitude,
+                                lon: longitude
+                            });
+
+                            updateCyclingStats();
+                        }
+
+                    },
+
+                    function(error) {
+
+                        console.log(
+                            "Cycling GPS error:",
+                            error
+                        );
+
+                        alert(
+                            "Unable to get GPS location. Please allow location access."
+                        );
+                    },
+
+                    {
+                        enableHighAccuracy: true,
+                        maximumAge: 0,
+                        timeout: 10000
+                    }
+                );
+        }
+
+
+        /* =====================================================
+           CYCLING STATS
+           ===================================================== */
+
+        function updateCyclingStats() {
+
+            document.getElementById(
+                "cycleDistance"
+            ).textContent =
+                cycleDistance.toFixed(2) + " km";
+
+
+            document.getElementById(
+                "cycleTime"
+            ).textContent =
+                formatTime(cycleSeconds);
+
+
+            if (cycleSeconds > 0 && cycleDistance > 0) {
+
+                const speed =
+                    cycleDistance /
+                    (cycleSeconds / 3600);
+
+                document.getElementById(
+                    "cycleSpeed"
+                ).textContent =
+                    speed.toFixed(1) +
+                    " km/h";
+
+            } else {
+
+                document.getElementById(
+                    "cycleSpeed"
+                ).textContent =
+                    "0.0 km/h";
+            }
+        }
+
+
+        /* =====================================================
+           START CYCLING
+           ===================================================== */
+
+        function startCycling() {
+
+            /*
+             * New session
+             */
+
+            if (!cycleActive && cycleSeconds === 0) {
+
+                cycleDistance = 0;
+                cycleRoute = [];
+                lastCyclePosition = null;
+
+                cycleStartedAt = new Date();
+            }
+
+            cycleActive = true;
+
+
+            if (cycleTimer === null) {
+
+                cycleTimer = setInterval(
+                    function() {
+
+                        cycleSeconds++;
+
+                        updateCyclingStats();
+
+                    },
+                    1000
+                );
+            }
+
+
+            startCyclingGPS();
+        }
+
+
+        /* =====================================================
+           PAUSE CYCLING
+           ===================================================== */
+
+        function pauseCycling() {
+
+            if (!cycleActive) {
+                return;
+            }
+
+            cycleActive = false;
+
+
+            if (cycleTimer !== null) {
+
+                clearInterval(cycleTimer);
+
+                cycleTimer = null;
+            }
+
+
+            if (cycleGPSWatcher !== null) {
+
+                navigator.geolocation.clearWatch(
+                    cycleGPSWatcher
+                );
+
+                cycleGPSWatcher = null;
+            }
+
+            lastCyclePosition = null;
+        }
+
+
+        /* =====================================================
+           STOP CYCLING
+           ===================================================== */
+
+        function stopCycling() {
+
+            if (
+                cycleSeconds === 0 &&
+                cycleDistance === 0
+            ) {
+                return;
+            }
+
+            cycleActive = false;
+
+
+            if (cycleTimer !== null) {
+
+                clearInterval(cycleTimer);
+
+                cycleTimer = null;
+            }
+
+
+            if (cycleGPSWatcher !== null) {
+
+                navigator.geolocation.clearWatch(
+                    cycleGPSWatcher
+                );
+
+                cycleGPSWatcher = null;
+            }
+
+            lastCyclePosition = null;
+
+
+            document.getElementById(
+                "savePopupInfo"
+            ).innerHTML =
+
+                "Cycling<br>" +
+
+                "Distance: " +
+                cycleDistance.toFixed(2) +
+                " km<br>" +
+
+                "Duration: " +
+                formatTime(cycleSeconds) +
+                "<br>" +
+
+                "Speed: " +
+                (
+                    cycleSeconds > 0 &&
+                    cycleDistance > 0
+
+                        ? (
+                            cycleDistance /
+                            (cycleSeconds / 3600)
+                        ).toFixed(1) +
+                        " km/h"
+
+                        : "0.0 km/h"
+                );
+
+
+            window.currentActivity = "cycling";
+
+
+            document.getElementById(
+                "savePopup"
+            ).style.display = "flex";
+        }
+
+
+        /* =====================================================
+           SAVE SESSION
+           ===================================================== */
+
+        function saveSession() {
+
+            const history =
+                JSON.parse(
+                    localStorage.getItem(
+                        "fitnessHistory"
+                    ) || "[]"
+                );
+
+
+            let session;
+
+
+            /* =========================
+               RUNNING SESSION
+               ========================= */
+
+            if (
+                window.currentActivity === "running"
+            ) {
+
+                session = {
+
+                    id: Date.now(),
+
+                    activity: "running",
+
+                    date:
+                        runStartedAt
+                            ? runStartedAt.toLocaleDateString()
+                            : new Date().toLocaleDateString(),
+
+                    time:
+                        runStartedAt
+                            ? runStartedAt.toLocaleTimeString(
+                                [],
+                                {
+                                    hour: "2-digit",
+                                    minute: "2-digit"
+                                }
+                            )
+                            : new Date().toLocaleTimeString(),
+
+                    timestamp:
+                        runStartedAt
+                            ? runStartedAt.getTime()
+                            : Date.now(),
+
+                    duration:
+                        runSeconds,
+
+                    distance:
+                        runDistance,
+
+                    pace:
+                        runDistance > 0
+                            ? runSeconds / runDistance
+                            : 0,
+
+                    route:
+                        runRoute
+                };
+            }
+
+
+            /* =========================
+               CYCLING SESSION
+               ========================= */
+
+            else if (
+                window.currentActivity === "cycling"
+            ) {
+
+                session = {
+
+                    id: Date.now(),
+
+                    activity: "cycling",
+
+                    date:
+                        cycleStartedAt
+                            ? cycleStartedAt.toLocaleDateString()
+                            : new Date().toLocaleDateString(),
+
+                    time:
+                        cycleStartedAt
+                            ? cycleStartedAt.toLocaleTimeString(
+                                [],
+                                {
+                                    hour: "2-digit",
+                                    minute: "2-digit"
+                                }
+                            )
+                            : new Date().toLocaleTimeString(),
+
+                    timestamp:
+                        cycleStartedAt
+                            ? cycleStartedAt.getTime()
+                            : Date.now(),
+
+                    duration:
+                        cycleSeconds,
+
+                    distance:
+                        cycleDistance,
+
+                    speed:
+                        cycleSeconds > 0
+                            ? cycleDistance /
+                              (cycleSeconds / 3600)
+                            : 0,
+
+                    route:
+                        cycleRoute
+                };
+            }
+
+
+            if (!session) {
+                return;
+            }
+
+
+            /*
+             * Add newest session to History
+             */
+
+            history.unshift(session);
+
+
+            /*
+             * Save permanently in browser
+             */
+
+            localStorage.setItem(
+                "fitnessHistory",
+                JSON.stringify(history)
+            );
+
+
+            /*
+             * Close popup
+             */
+
+            document.getElementById(
+                "savePopup"
+            ).style.display = "none";
+
+
+            /*
+             * Reset current activity
+             */
+
+            if (
+                window.currentActivity === "running"
+            ) {
+
+                resetRunning();
+
+            } else {
+
+                resetCycling();
+            }
+
+
+            /*
+             * Show History
+             */
+
+            showTab("history");
+        }
+
+
+        /* =====================================================
+           CANCEL STOP
+           ===================================================== */
+
+        function cancelStop() {
+
+            document.getElementById(
+                "savePopup"
+            ).style.display = "none";
+
+
+            /*
+             * Resume running
+             */
+
+            if (
+                window.currentActivity === "running"
+            ) {
+
+                runActive = true;
+
+                if (runTimer === null) {
+
+                    runTimer = setInterval(
+                        function() {
+
+                            runSeconds++;
+
+                            updateRunningStats();
+
+                        },
+                        1000
+                    );
+                }
+
+                startRunningGPS();
+            }
+
+
+            /*
+             * Resume cycling
+             */
+
+            else if (
+                window.currentActivity === "cycling"
+            ) {
+
+                cycleActive = true;
+
+                if (cycleTimer === null) {
+
+                    cycleTimer = setInterval(
+                        function() {
+
+                            cycleSeconds++;
+
+                            updateCyclingStats();
+
+                        },
+                        1000
+                    );
+                }
+
+                startCyclingGPS();
+            }
+        }
+
+
+        /* =====================================================
+           DISCARD SESSION
+           ===================================================== */
+
+        function discardSession() {
+
+            document.getElementById(
+                "savePopup"
+            ).style.display = "none";
+
+
+            if (
+                window.currentActivity === "running"
+            ) {
+
+                resetRunning();
+
+            } else {
+
+                resetCycling();
+            }
+        }
+
+
+        /* =====================================================
+           RESET RUNNING
+           ===================================================== */
+
+        function resetRunning() {
+
+            if (runTimer !== null) {
+
+                clearInterval(runTimer);
+
+                runTimer = null;
+            }
+
+
+            if (runGPSWatcher !== null) {
+
+                navigator.geolocation.clearWatch(
+                    runGPSWatcher
+                );
+
+                runGPSWatcher = null;
+            }
+
+
+            runSeconds = 0;
+            runDistance = 0;
+
+            lastRunPosition = null;
+
+            runRoute = [];
+
+            runActive = false;
+
+            runStartedAt = null;
+
+
+            updateRunningStats();
+        }
+
+
+        /* =====================================================
+           RESET CYCLING
+           ===================================================== */
+
+        function resetCycling() {
+
+            if (cycleTimer !== null) {
+
+                clearInterval(cycleTimer);
+
+                cycleTimer = null;
+            }
+
+
+            if (cycleGPSWatcher !== null) {
+
+                navigator.geolocation.clearWatch(
+                    cycleGPSWatcher
+                );
+
+                cycleGPSWatcher = null;
+            }
+
+
+            cycleSeconds = 0;
+            cycleDistance = 0;
+
+            lastCyclePosition = null;
+
+            cycleRoute = [];
+
+            cycleActive = false;
+
+            cycleStartedAt = null;
+
+
+            updateCyclingStats();
+        }
+
+
+        /* =====================================================
+           HISTORY
+           ===================================================== */
+
+        function getHistory() {
+
+            return JSON.parse(
+                localStorage.getItem(
+                    "fitnessHistory"
+                ) || "[]"
+            );
+        }
+
+
+        /* =====================================================
+           DRAW GPS ROUTE
+           ===================================================== */
+
+        function createRouteSVG(route) {
+
+            if (
+                !route ||
+                route.length === 0
+            ) {
+
+                return `
+                    <div class="no-route">
+                        No GPS track recorded
+                    </div>
+                `;
+            }
+
+
+            /*
+             * If only one GPS point exists,
+             * show a simple dot.
+             */
+
+            if (route.length === 1) {
+
+                return `
+                    <svg
+                        class="route-svg"
+                        viewBox="0 0 100 100"
+                        preserveAspectRatio="none"
+                    >
+                        <circle
+                            cx="50"
+                            cy="50"
+                            r="3"
+                            class="route-start"
+                        />
+                    </svg>
+                `;
+            }
+
+
+            /*
+             * Find geographic boundaries
+             */
+
+            let minLat = Infinity;
+            let maxLat = -Infinity;
+
+            let minLon = Infinity;
+            let maxLon = -Infinity;
+
+
+            route.forEach(point => {
+
+                if (!point) return;
+
+                minLat =
+                    Math.min(
+                        minLat,
+                        point.lat
+                    );
+
+                maxLat =
+                    Math.max(
+                        maxLat,
+                        point.lat
+                    );
+
+                minLon =
+                    Math.min(
+                        minLon,
+                        point.lon
+                    );
+
+                maxLon =
+                    Math.max(
+                        maxLon,
+                        point.lon
+                    );
+            });
+
+
+            /*
+             * Prevent division by zero
+             */
+
+            if (maxLat === minLat) {
+                maxLat += 0.0001;
+                minLat -= 0.0001;
+            }
+
+            if (maxLon === minLon) {
+                maxLon += 0.0001;
+                minLon -= 0.0001;
+            }
+
+
+            const padding = 10;
+
+
+            /*
+             * Convert GPS coordinates
+             * into SVG coordinates.
+             */
+
+            const points = route
+                .filter(point => point)
+                .map(point => {
+
+                    const x =
+                        padding +
+                        (
+                            (point.lon - minLon) /
+                            (maxLon - minLon)
+                        ) *
+                        (100 - padding * 2);
+
+
+                    /*
+                     * SVG Y increases downward,
+                     * so latitude is inverted.
+                     */
+
+                    const y =
+                        padding +
+                        (
+                            1 -
+                            (
+                                (point.lat - minLat) /
+                                (maxLat - minLat)
+                            )
+                        ) *
+                        (100 - padding * 2);
+
+
+                    return {
+                        x: x,
+                        y: y
+                    };
+                });
+
+
+            const pointsString =
+                points
+                    .map(
+                        p =>
+                            `${p.x},${p.y}`
+                    )
+                    .join(" ");
+
+
+            const first =
+                points[0];
+
+            const last =
+                points[points.length - 1];
+
+
+            return `
+
+                <svg
+                    class="route-svg"
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                >
+
+                    <polyline
+                        points="${pointsString}"
+                        class="route-line"
+                    />
+
+                    <circle
+                        cx="${first.x}"
+                        cy="${first.y}"
+                        r="2.5"
+                        class="route-start"
+                    />
+
+                    <circle
+                        cx="${last.x}"
+                        cy="${last.y}"
+                        r="2.5"
+                        class="route-end"
+                    />
+
+                </svg>
+
+            `;
+        }
+
+
+        /* =====================================================
+           RENDER HISTORY
+           ===================================================== */
+
+        function renderHistory() {
+
+            const history =
+                getHistory();
+
+
+            const historyList =
+                document.getElementById(
+                    "historyList"
+                );
+
+
+            if (history.length === 0) {
+
+                historyList.innerHTML = `
+
+                    <div class="history-empty">
+
+                        No activities yet.
+
+                        <br><br>
+
+                        Start a run or cycle to see
+                        your activities here.
+
+                    </div>
+
+                `;
+
+                return;
+            }
+
+
+            historyList.innerHTML = "";
+
+
+            history.forEach(session => {
+
+                const card =
+                    document.createElement(
+                        "div"
+                    );
+
+                card.className =
+                    "history-card";
+
+
+                const isRunning =
+                    session.activity === "running";
+
+
+                const activityName =
+                    isRunning
+                        ? "🏃 Running"
+                        : "🚴 Cycling";
+
+
+                const duration =
+                    formatTime(
+                        session.duration
+                    );
+
+
+                let performanceText;
+
+
+                if (isRunning) {
+
+                    performanceText =
+                        formatPace(
+                            session.pace
+                        );
+
+                } else {
+
+                    performanceText =
+                        Number(
+                            session.speed || 0
+                        ).toFixed(1)
+                        + " km/h";
+                }
+
+
+                card.innerHTML = `
+
+                    <div class="history-header">
+
+                        <div class="history-title">
+                            ${activityName}
+                        </div>
+
+                        <button
+                            class="delete-btn"
+                            onclick="openDeletePopup(${session.id})"
+                            title="Delete activity"
+                        >
+                            🗑️
+                        </button>
+
+                    </div>
+
+
+                    <div class="history-date">
+
+                        ${session.date}
+                        •
+                        ${session.time}
+
+                    </div>
+
+
+                    <div class="route-container">
+
+                        ${createRouteSVG(
+                            session.route
+                        )}
+
+                    </div>
+
+
+                    <div class="history-stats">
+
+                        <div class="history-stat">
+
+                            <div class="history-stat-label">
+                                Distance
+                            </div>
+
+                            <div class="history-stat-value">
+                                ${Number(
+                                    session.distance || 0
+                                ).toFixed(2)} km
+                            </div>
+
+                        </div>
+
+
+                        <div class="history-stat">
+
+                            <div class="history-stat-label">
+                                Duration
+                            </div>
+
+                            <div class="history-stat-value">
+                                ${duration}
+                            </div>
+
+                        </div>
+
+
+                        <div class="history-stat">
+
+                            <div class="history-stat-label">
+                                ${isRunning
+                                    ? "Pace"
+                                    : "Speed"}
+                            </div>
+
+                            <div class="history-stat-value">
+                                ${performanceText}
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                `;
+
+
+                historyList.appendChild(card);
+
+            });
+        }
+
+
+        /* =====================================================
+           DELETE SYSTEM
+           ===================================================== */
+
+        let deleteSessionId = null;
+
+
+        function openDeletePopup(id) {
+
+            deleteSessionId = id;
+
+
+            document.getElementById(
+                "deletePopup"
+            ).style.display = "flex";
+        }
+
+
+        function closeDeletePopup() {
+
+            deleteSessionId = null;
+
+
+            document.getElementById(
+                "deletePopup"
+            ).style.display = "none";
+        }
+
+
+        function confirmDelete() {
+
+            if (deleteSessionId === null) {
+                return;
+            }
+
+
+            let history =
+                getHistory();
+
+
+            history =
+                history.filter(
+                    session =>
+                        session.id !==
+                        deleteSessionId
+                );
+
+
+            localStorage.setItem(
+                "fitnessHistory",
+                JSON.stringify(history)
+            );
+
+
+            closeDeletePopup();
+
+
+            renderHistory();
+        }
+
+
+        /* =====================================================
+           INITIAL SETUP
+           ===================================================== */
+
+        updateRunningStats();
+        updateCyclingStats();
+
+        renderHistory();
+
+        showTab("history");
+
+    </script>
+<script>
+if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/service-worker.js")
+            .then(() => console.log("TrackX service worker registered"))
+            .catch(error => console.error("Service worker registration failed:", error));
+    });
+}
+</script>
+</body>
+</html>
